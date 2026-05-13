@@ -1,0 +1,4 @@
+{
+  "watch": ["api"],
+  "ignore": ["**/*.json", "auth_info_baileys/**", "node_modules/**"]
+}
