@@ -18,6 +18,14 @@ const __dirname = path.dirname(__filename);
 const API_URL = process.env.API_URL || "http://localhost:5000/api";
 const AUTH_DIR = path.join(__dirname, "../auth_info_baileys");
 
+// const ADMIN_PHONE = "62811294957";
+// const ADMIN_PHONE = "6287710633090";
+// const ADMIN_JID = `${ADMIN_PHONE}@s.whatsapp.net`;
+
+const ADMIN_PHONE = "6287710633090";
+const ADMIN_LID = "257814085779673@lid";
+const ADMIN_JID = "257814085779673@lid";
+
 let sock;
 let userSessions = {};
 let isConnected = false;
@@ -143,17 +151,16 @@ export async function initializeWhatsApp() {
 
         console.log(`[v0] Message from ${sender}: ${text}`);
 
-        const ADMIN_NUMBER = "6289527749870@s.whatsapp.net";
+        const isAdmin = sender === ADMIN_JID || sender === ADMIN_LID;
 
-        if (sender === ADMIN_NUMBER) {
+        if (isAdmin) {
           try {
             const lowerText = text.toLowerCase().trim();
 
-            // APPROVE
             if (lowerText.startsWith("approve ")) {
               const paymentId = lowerText.replace("approve ", "").trim();
 
-              await axios.patch(`${API_URL}/payments/${paymentId}`, {
+              await axios.patch(`${API_URL}/payments/${paymentId}/status`, {
                 paymentStatus: "approved",
               });
 
@@ -164,11 +171,10 @@ export async function initializeWhatsApp() {
               continue;
             }
 
-            // REJECT
             if (lowerText.startsWith("reject ")) {
               const paymentId = lowerText.replace("reject ", "").trim();
 
-              await axios.patch(`${API_URL}/payments/${paymentId}`, {
+              await axios.patch(`${API_URL}/payments/${paymentId}/status`, {
                 paymentStatus: "rejected",
               });
 
@@ -178,6 +184,27 @@ export async function initializeWhatsApp() {
 
               continue;
             }
+
+            if (lowerText === "help") {
+              await sock.sendMessage(sender, {
+                text:
+                  `📌 Admin Commands:\n\n` +
+                  `Approve [paymentId]\n` +
+                  `Reject [paymentId]\n\n` +
+                  `Contoh:\n` +
+                  `Approve 682fxxxx`,
+              });
+
+              continue;
+            }
+
+            await sock.sendMessage(sender, {
+              text:
+                `❌ Command admin tidak dikenal.\n\n` +
+                `Ketik *help* untuk melihat daftar command.`,
+            });
+
+            continue;
           } catch (error) {
             console.error("[v0] Admin command error:", error.message);
 
@@ -709,7 +736,7 @@ async function handleMessage(sender, text, hasImage = false) {
                 paymentId: session.orderData.paymentId,
                 orderCode: session.orderData.orderCode,
                 customerName: session.orderData.customerName,
-                customerPhone: sender.split("@")[0],
+                customerPhone: getPhoneFromJid(sender),
                 productName: session.selectedProduct.name,
                 rentalDate: session.orderData.rentalDate,
                 rentalSession: session.orderData.rentalSession,
@@ -930,44 +957,31 @@ async function sendImage(phone, imageUrl, caption = "") {
 // ============================================================
 async function sendAdminApprovalMessage(data) {
   try {
-    // const ADMIN_NUMBER = "6289527749870@s.whatsapp.net";
-    const ADMIN_NUMBER = "62811294957@s.whatsapp.net";
-
-    await sock.sendMessage(ADMIN_NUMBER, {
+    // Bubble 1: Ringkasan order
+    await sock.sendMessage(ADMIN_JID, {
       text:
         `📦 Order Baru CASAJA\n\n` +
         `🧾 Order: ${data.orderCode}\n` +
-        `👤 ${data.customerName}\n` +
-        `📱 ${data.customerPhone}\n` +
-        `🔌 ${data.productName}\n` +
-        `📅 ${data.rentalDate}\n` +
-        `⏰ ${data.rentalSession}\n` +
-        `💳 ${data.paymentMethod}\n\n` +
-        `Pilih aksi di bawah:`,
-
-      footer: "CASAJA",
-
-      buttons: [
-        {
-          buttonId: `approve_${data.paymentId}`,
-          buttonText: {
-            displayText: "✅ Approve",
-          },
-          type: 1,
-        },
-        {
-          buttonId: `reject_${data.paymentId}`,
-          buttonText: {
-            displayText: "❌ Reject",
-          },
-          type: 1,
-        },
-      ],
-
-      headerType: 1,
+        `🆔 Payment ID: ${data.paymentId}\n` +
+        `👤 Nama: ${data.customerName}\n` +
+        `📱 No. WA: ${data.customerPhone}\n` +
+        `🔌 Produk: ${data.productName}\n` +
+        `📅 Tanggal: ${data.rentalDate}\n` +
+        `⏰ Sesi: ${data.rentalSession}\n` +
+        `💳 Metode Bayar: ${data.paymentMethod}`,
     });
 
-    console.log("[v0] SUCCESS SEND ADMIN BUTTON");
+    // Bubble 2: Command approve
+    await sock.sendMessage(ADMIN_JID, {
+      text: `Approve ${data.paymentId}`,
+    });
+
+    // Bubble 3: Command reject
+    await sock.sendMessage(ADMIN_JID, {
+      text: `Reject ${data.paymentId}`,
+    });
+
+    console.log("[v0] SUCCESS SEND ADMIN CONFIRMATION COMMANDS");
   } catch (error) {
     console.error("[v0] Admin notif error:", error.message);
   }
@@ -1014,4 +1028,9 @@ function getDateFormatted(date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function getPhoneFromJid(jid) {
+  const decoded = jidDecode(jid);
+  return decoded?.user || jid.split("@")[0].split(":")[0];
 }
