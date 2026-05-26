@@ -326,8 +326,8 @@ async function handleMessage(sender, text, hasImage = false) {
           `Layanan peminjaman kabel roll untuk mahasiswa BINUS Semarang\n\n` +
           `Silakan pilih menu:\n` +
           `1️⃣ Pinjam Kabel\n` +
-          `2️⃣ Cara Pemesanan\n` +
-          `3️⃣ Hubungi Admin`;
+          `2️⃣ Cara Pemesanan\n\n` +
+          `💡 Ketik *end* kapan saja untuk mengakhiri sesi chatbot`;
         session.step = "menu";
         break;
 
@@ -337,10 +337,12 @@ async function handleMessage(sender, text, hasImage = false) {
       case "menu":
         if (userInput === "1") {
           response =
-            `📅 Masukkan tanggal peminjaman\n` +
-            `Format: YYYY-MM-DD\n\n` +
-            `Contoh:\n` +
-            `${getTodayFormatted()}`;
+            `📅 Masukkan tanggal peminjaman\n\n` +
+            `Ketik salah satu:\n` +
+            `- hari ini\n` +
+            `- besok\n` +
+            `- lusa\n` +
+            `- ${getTodayFormatted()}`;
           session.step = "input_date";
         } else if (userInput === "2") {
           response =
@@ -352,14 +354,8 @@ async function handleMessage(sender, text, hasImage = false) {
             `5. Pilih metode pembayaran\n` +
             `6. Konfirmasi pesanan`;
           session.step = "menu";
-        } else if (userInput === "3") {
-          response =
-            `📞 Admin CASAJA:\n` +
-            `WA: +62 895 2774 9870\n` +
-            `Email: casajatbk@gmail.com`;
-          session.step = "menu";
         } else {
-          response = `Pilihan tidak valid. Silakan ketik 1, 2, atau 3`;
+          response = `Pilihan tidak valid. Silakan ketik 1 atau 2`;
         }
         break;
 
@@ -367,37 +363,28 @@ async function handleMessage(sender, text, hasImage = false) {
       // STEP 3: Input tanggal peminjaman
       // ----------------------------------------------------------
       case "input_date": {
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        const parsedDate = parseRentalDate(text);
 
-        if (!dateRegex.test(userInput)) {
+        if (!parsedDate) {
           response =
             `❌ Format tanggal tidak valid.\n\n` +
-            `Gunakan format: YYYY-MM-DD\n\n` +
-            `Contoh:\n` +
-            `${getTodayFormatted()}`;
+            `Ketik salah satu:\n` +
+            `- hari ini\n` +
+            `- besok\n` +
+            `- lusa\n` +
+            `- ${getTodayFormatted()}`;
           break;
         }
 
-        const [year, month, day] = userInput.split("-");
-        const selectedDate = new Date(year, month - 1, day);
-
-        if (isNaN(selectedDate.getTime())) {
-          response = `❌ Tanggal tidak valid. Coba lagi.`;
+        if (parsedDate === "past") {
+          response = `❌ Tanggal tidak boleh hari yang sudah lewat.\n\nSilakan pilih hari ini atau hari setelahnya.`;
           break;
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        if (selectedDate < today) {
-          response = `❌ Tanggal tidak boleh kurang dari hari ini. Coba lagi.`;
-          break;
-        }
-
-        session.orderData.rentalDate = userInput;
+        session.orderData.rentalDate = parsedDate;
 
         response =
-          `📅 Tanggal dipilih: ${userInput}\n\n` +
+          `📅 Tanggal dipilih: ${parsedDate}\n\n` +
           `⏰ Pilih Sesi Peminjaman:\n` +
           `1️⃣ 07.20 – 09.00\n` +
           `2️⃣ 09.20 – 11.00\n` +
@@ -488,10 +475,12 @@ async function handleMessage(sender, text, hasImage = false) {
       case "no_stock_menu":
         if (userInput === "1") {
           response =
-            `📅 Masukkan tanggal peminjaman baru\n` +
-            `Format: YYYY-MM-DD\n\n` +
-            `Contoh:\n` +
-            `${getTodayFormatted()}`;
+            `📅 Masukkan tanggal peminjaman\n\n` +
+            `Ketik salah satu:\n` +
+            `- hari ini\n` +
+            `- besok\n` +
+            `- lusa\n` +
+            `- ${getTodayFormatted()}`;
           session.step = "input_date";
         } else if (userInput === "2") {
           response =
@@ -505,13 +494,9 @@ async function handleMessage(sender, text, hasImage = false) {
           session.step = "select_session";
         } else if (userInput === "3") {
           response =
-            `Silakan pilih menu:\n` +
-            `1️⃣ Pinjam Kabel\n` +
-            `2️⃣ Cara Pemesanan\n` +
-            `3️⃣ Hubungi Admin`;
-          session.step = "menu";
+            `Silakan pilih menu:\n` + `1️⃣ Pinjam Kabel\n` + `2️⃣ Cara Pemesanan`;
         } else {
-          response = `Pilihan tidak valid. Ketik 1, 2, atau 3`;
+          response = `Pilihan tidak valid. Ketik 1, 2`;
         }
         break;
 
@@ -542,12 +527,15 @@ async function handleMessage(sender, text, hasImage = false) {
             `Email Binus: budi@binus.ac.id\n` +
             `Ruangan: 201`;
 
+          await sock.sendMessage(sender, { text: response });
+
+          await sock.sendMessage(sender, {
+            text: `Nama: \n` + `NIM: \n` + `Email Binus: \n` + `Ruangan: `,
+          });
+
           session.step = "input_data";
-        } else {
-          response =
-            `❌ Produk tidak valid.\n\n` +
-            `Ketik jumlah lubang sesuai daftar di atas.\n` +
-            `Contoh: 4 / 5 / 6`;
+
+          return;
         }
         break;
       }
@@ -983,4 +971,47 @@ async function sendAdminApprovalMessage(data) {
   } catch (error) {
     console.error("[v0] Admin notif error:", error.message);
   }
+}
+
+function parseRentalDate(input) {
+  const value = input.trim().toLowerCase();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let selectedDate;
+
+  if (value === "hari ini") {
+    selectedDate = new Date(today);
+  } else if (value === "besok") {
+    selectedDate = new Date(today);
+    selectedDate.setDate(today.getDate() + 1);
+  } else if (value === "lusa") {
+    selectedDate = new Date(today);
+    selectedDate.setDate(today.getDate() + 2);
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-");
+    selectedDate = new Date(year, month - 1, day);
+  } else {
+    return null;
+  }
+
+  if (isNaN(selectedDate.getTime())) {
+    return null;
+  }
+
+  selectedDate.setHours(0, 0, 0, 0);
+
+  if (selectedDate < today) {
+    return "past";
+  }
+
+  return getDateFormatted(selectedDate);
+}
+
+function getDateFormatted(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
